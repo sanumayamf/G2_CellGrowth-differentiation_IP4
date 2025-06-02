@@ -1,3 +1,41 @@
-INTEGRATED IV- Group 2: Cell Growth and Differentiaton
-Ostolaza M., Gómez O., Marcos M. & Montalbán SM. UVic-Ucc
-Multiple sequence analyisis
+# INTEGRATED IV- Group 2: Cell Growth and Differentiaton
+### Ostolaza M., Gómez O., Marcos M. & Montalbán SM. UVic-Ucc
+## Multiple Sequence Analysis (MSA)
+
+# 1st charge libraries
+library(ggplot2)
+library(DESeq2)
+library(edgeR)
+library(ggplot2)
+library(knitr)
+library(EnhancedVolcano)
+library(pheatmap)
+library(topGO)
+library(org.Hs.eg.db)
+
+#if you need to download them:
+##########Installation of the packages in case you don't have them (Run only once!):
+##################From bioconductor:
+##Deseq2
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("DESeq2")
+#EnhancedVolcano
+BiocManager::install('EnhancedVolcano')
+#or 
+devtools::install_github('kevinblighe/EnhancedVolcano')
+##edgeR
+BiocManager::install("edgeR")
+#topGO
+BiocManager::install("topGO")
+#clusterProfiler
+BiocManager::install("clusterProfiler")
+#org.Hs.eg.db
+BiocManager::install("org.Hs.eg.db")
+##############From CRAN:
+##ggplot2
+install.packages("ggplot2")
+##pheatmap
+install.packages("pheatmap")
+#knitr
+install.packages("knitr")
