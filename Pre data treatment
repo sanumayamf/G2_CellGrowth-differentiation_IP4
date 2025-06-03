@@ -1,0 +1,197 @@
+INTEGRATED IV- Group 2: Cell Growth and Differentiaton
+Ostolaza M., Gómez O., Marcos M. & Montalbán SM. UVic-UCC
+---
+title: "B2 Cell Growth & differentiation"
+author: "Sanu Maya Montalbán Ferrer"
+date: "2025-06-03"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: false
+    toc_collapsed: false
+theme: lumen
+editor_options:
+  markdown:
+---
+
+# 1.PRE DATA TREATMENT
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r echo=FALSE, results='hide',message=FALSE}
+#Load packages:
+library(ggplot2)
+library(DESeq2)
+library(edgeR)
+library(ggplot2)
+library(knitr)
+
+library(EnhancedVolcano)
+library(pheatmap)
+library(topGO)
+library(org.Hs.eg.db)
+
+#in case you need to dowload the librarires some of them aren't in CRAA repository copy the following code(Run only once!):
+##################From bioconductor:
+##Deseq2
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("DESeq2")
+#EnhancedVolcano
+BiocManager::install('EnhancedVolcano')
+#or 
+devtools::install_github('kevinblighe/EnhancedVolcano')
+##edgeR
+BiocManager::install("edgeR")
+#topGO
+BiocManager::install("topGO")
+#clusterProfiler
+BiocManager::install("clusterProfiler")
+#org.Hs.eg.db
+BiocManager::install("org.Hs.eg.db")
+##############From CRAN:
+##ggplot2
+install.packages("ggplot2")
+##pheatmap
+install.packages("pheatmap")
+#knitr
+install.packages("knitr")
+
+
+# to let people know what version is being used
+sessionInfo()
+```
+
+### 1.1 DATA LOADING
+Analysis of data from: https://pmc.ncbi.nlm.nih.gov/articles/PMC9687758/#biomolecules-12-01693-f005. After preprocessing the data a gene expression matrix has been obtained. Combining this information with the corresponding metadata (clinical information) we can proceed with further analysis:
+
+```{r}
+setwd("/Users/sanumaya/Downloads/galaxyB2 group")
+```
+
+Loading the data obtained by galaxy (Feature counts annotated)
+```{r}
+
+SRR21709659 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709659.tabular", row.names=1)
+SRR21709660 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709660.tabular", row.names=1)
+SRR21709661 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709661.tabular", row.names=1)
+SRR21709662 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709662.tabular", row.names=1)
+
+SRR21709663 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709663.tabular", row.names=1)
+SRR21709664 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709664.tabular", row.names=1)
+SRR21709665 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709665.tabular", row.names=1)
+SRR21709666 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709666.tabular", row.names=1)
+
+
+```
+
+Joining the different table of counts:
+    * C bind function can only be used when rows number are the same
+    
+```{r}
+counts_all <- cbind(SRR21709659, SRR21709660)
+counts_all <- cbind(counts_all, SRR21709661)
+counts_all <- cbind(counts_all, SRR21709662)
+counts_all <- cbind(counts_all, SRR21709663)
+counts_all <- cbind(counts_all, SRR21709664)
+counts_all <- cbind(counts_all, SRR21709665)
+counts_all <- cbind(counts_all, SRR21709666)
+
+```
+
+* Loading metadata
+```{r}
+metadata <- read.csv2("Metadata.csv", dec = ",", row.names = 1)
+```
+
+In order to perform deseq2 metadata rows and column names need to be the same:
+```{r}
+rownames(metadata) %in% colnames (counts_all) 
+
+#exploration of the matryx
+counts_all[1:25, ]
+dim(counts_all)
+
+head(metadata)
+table(metadata$Condition)
+```
+
+
+### 1.2 GENERAL EXPLORATION, NORMALISATION OF THE DATA
+
+#### Observation of library size
+  *  Size is similiar, which is positive meaning that the variation is minimal and probably due to inevitable experimental human mistakes
+```{r}
+barplot(colSums(counts_all),las=2, cex.names = 0.6,
+        main ="Barplot of library sizes")
+```
+#### Normalisation
+RNAseq data is not normally distributed. Prior to differential gene expression analysis, the count matrix should be normalized.
+```{r}
+CPM <- cpm(counts_all) 
+CPM[1:5, 1:5]
+
+drop <- which(apply(CPM, 1, median) < 0.3)
+#Which is the number of droped genes? 
+length (drop)
+##Write a command here
+#REMEMBER: lenght(vector) i dim(Dataframe)
+
+counts <- counts_all[-drop, ]  
+CPM <- CPM[-drop, ]
+nrow(CPM) 
+```
+
+ 
+### 1.3 DESE2 OBJECT CREATION AND EXPLORATORY DATA ANALYSIS:
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = counts_all,
+                              colData = metadata,
+                              design = ~ Condition)
+
+dds$condition <- relevel(dds$Condition, ref = "Control")
+```
+
+#### 1.3.1 Principal Component Analysis PCA EXPLORATION:
+
+Principal Component Analysis (PCA) is a technique used to emphasize variation and bring out strong patterns in a dataset (dimensionality reduction).
+Before plotting in a PCA it is necessary to normalize first. In this case we will use rlog normalization.
+
+rlog normalization. This function transforms the count data to the log2 scale in a way which minimizes differences between samples for rows with small counts, and which normalizes with respect to library size (number of sequences obtained after sequencing).
+
+```{r}
+rsel <- rlog(dds, blind=TRUE)
+```
+
+
+```{r pca, echo=FALSE, out.width="2000px" }
+
+
+PCA <- ggplot(pca, aes(PC1, PC2)) +
+  geom_point(aes(colour = factor(Condition), shape = factor(Sex)), size = 4) +
+  scale_color_manual(values=c("#bab","blue")) + # Colors for Condition
+  scale_shape_manual(values=c(16, 17)) + # Shapes for Sex (can be adjusted)
+  theme_bw() + 
+  labs(title = "PCA - Principal Components Analysis", 
+       y = paste0("PC2: ", vars[2]), 
+       x = paste0("PC1: ", vars[1]))
+
+PCA
+```
+
+
+#### 1.3.2 HEATMAP EXPLORATION:
+ 
+```{r}
+pheatmap(log2(CPM + 1), # 0.3 drop  
+         show_rownames = F, 
+         annotation_col = metadata)
+```
+ 
+ 
