@@ -8,7 +8,7 @@ output:
   html_document:
     toc: true
     toc_float: true
-    toc_depth: 3
+    toc_depth: 5
     number_sections: false
     toc_collapsed: false
 theme: lumen
@@ -194,4 +194,146 @@ pheatmap(log2(CPM + 1), # 0.3 drop
          annotation_col = metadata)
 ```
  
+
+## 2. DIFFERENTIAL EXPRESSION ANALYSIS WITH DESEQ2:
+```{r}
+# the algorithm normalizese the data amb built an statistical  models to make the differential expression tests.
+dds <- DESeq(dds)
+res <- results(dds) #saving results as a variable
+# in order to obsesrve the results a dataframe is created
+df <- data.frame(results(dds))
+
+res01 <- results(dds, alpha=0.05) # every pvalue inferior to 0.05 is considered significant
+summary(res01)
+#convert it as a dataframe:
+
+res_sig <- as.data.frame(res01)
+#NA values correspond to filtered genes. Lowly expressed, in few samples.
+```
+##### Note: logfold
+  * negatve doown regulated
+  * positive ones up regulated - more expressed 
+  * log2((Expr * grp1)/(exore grp2))
+      --> grp2--> ref control
+     --->grp1--> casa
+if the ratio is hgiheer than 0 the loog will be postive if the ratio is lower than 0 the log will be negative
+
+  * as.data.frame vs data.frame --> f(x) igual, a vegades depenet de l¡objecte que vols formar 
+
+
+### 2.1 Volcano plot
+How many genes are upregulated? And downregulated? -->
+```{r}
+EnhancedVolcano <- EnhancedVolcano(res, lab = rownames(res), x = 'log2FoldChange', y = 'padj',
+                                            labSize = 2,  pointSize = 1.5, xlim = c(-7,7),ylim = c(0,30),FCcutoff = 0.58, pCutoff = 0.05, title = "Volcano Plot Control vs Treatment")
+
+EnhancedVolcano
+```
  
+Saving the top 30 genes that are more significant ( adj p-val < 0.05) and that are up-regulated.
+
+```{r}
+res_df <- as.data.frame(res)
+
+# Filter by padj < 0.05
+res_filtered <- res_df[which(res_df$padj < 0.05),]
+
+# Sort by log2FoldChange in descending order
+res_sorted <- res_filtered[order(res_filtered$log2FoldChange, decreasing = TRUE),]
+
+# Select the first 30 rows
+top_30 <- head(res_sorted, 30)
+indices <- rownames(top_30)
+indices
+```
+
+
+
+Repeating the heatmap considering only differential expressed genes:
+
+```{r}
+data_counts <- log2(CPM + 1)
+data_counts <- subset(data_counts, rownames(data_counts) %in% rownames(res_filtered))
+pheatmap(data_counts, 
+         show_rownames = F, 
+         annotation_col = metadata)
+```
+
+## 3. GO ENRICHMENT
+
+
+```{r}
+# topGO requires all genes as a named list of P-values, plus a function to select significant genes (see below)
+# in this case 'allGenes' or the 'universe' of genes are all the genes that have been tested in the DGE analysis 
+
+#Create a res table without the NAs:
+res_ok <- na.omit(res)
+allGenes <- res_ok$padj
+names(allGenes) <- rownames(res_ok)
+
+# Create topGO object
+GOdata <- new("topGOdata",
+              ontology = "BP",                 # We are interested in the 'Biological Process' domain of GO 
+              allGenes = allGenes,             # The 'universe' of genes
+              geneSel = function(p){p < 0.05}, # Define function (selects genes with adjusted P-values below 0.05)
+              annotationFun = annFUN.org,      # Function to map gene IDs to GO terms
+              mapping = "org.Hs.eg.db",        # H. sapiens annotation
+              ID = "entrez")                  # We are working with entrez gene IDs
+
+# Run Fisher test  
+resultFisher <- runTest(GOdata, algorithm = "classic", statistic = "fisher")
+
+# Results (top 100)
+GOres <- GenTable(GOdata, classicFisher = resultFisher, topNodes = 100) 
+
+head(GOres)
+```
+
+
+# Autonomous Work day 8
+"152816"    "57611"     "3694"      "1746"      "753"   
+```{r}
+indices[1:2]
+
+data_counts_subB2 <- t(counts_all)
+data_counts_subB2 <- data_counts_subB2[, c("152816", "57611")]
+colnames(data_counts_subB2) <- c("gene1_B2", "gene2_B2")
+ggplot(as.data.frame(data_counts_subB2), aes(x = gene1_B2, y= gene2_B2)) +
+geom_point() +
+labs(tittle = "Scatter Plot", x = "X axis", y = "Y axis")
+
+
+cor.test(data_counts_subB2[, 1], data_counts_subB2[, 2], method = "spearman")
+tail_30 <- tail(res_sorted, 30)
+
+data_counts_sub_underrepB2 <- t(counts_all)
+data_counts_sub_underrepB2 <- as.data.frame(data_counts_sub_underrepB2[, c("11170")])
+# Add the variable in the latest (condition)
+data_counts_sub_underrepB2$Condition <- metadata$Condition
+colnames(data_counts_sub_underrepB2)[1] <- "geneB2"
+ggplot(data_counts_sub_underrepB2, aes(x = Condition, y= geneB2)) +
+geom_boxplot()+
+labs(tittle = "Distribution of the most underrepresented gene across conditions", x ="Group", y = "Raw counts")
+```
+
+
+
+# 4. Development of predictive models using different genes
+
+```{r}
+# escollim els 5 gens més expressats 
+
+# Sort by log2FoldChange in descending order
+res_sorted5 <- res_filtered[order(res_filtered$log2FoldChange, decreasing = TRUE),]
+
+# Select the first 30 rows
+top_5 <- head(res_sorted, 5)
+indices5 <- rownames(top_5)
+indices5
+
+# gene 152816, 57611, 3694, 1746 & 753
+```
+
+NOTA: relaemnt podem agafar els 3 gens pq 5 són masses models més de 20....
+
+## 4.1 Creation of dataframe with all the data needed
