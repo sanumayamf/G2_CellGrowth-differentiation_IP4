@@ -1,9 +1,9 @@
-
+<!-- This is an R Markdown (.Rmd) file made for rendering in RStudio® -->
 
 ---
 title: "INTEGRATED IV- Group 2: Cell Growth and Differentiaton: RNA_seq analysis with R"
 author: "Gómez O.; Montalbán, SM.; Ostolaza, M.; Sánchez, M"
-date: "2nd Year Biomedicine - Integrated Project IV - 2024/25"
+date: "2nd Year in Biomedicine - Integrated Project IV - 2024/25"
 output: 
   html_document:
     toc: true
@@ -234,7 +234,7 @@ PCA <- ggplot(pca, aes(PC1, PC2)) +
 PCA
 ```
 
-## 2. Differential expression (DE) analysis with DESeq2
+## 2. DIFFERENTIAL EXPRESSION (DE) ANALYSIS WITH DESeq2
 
 Calculation of the differential expressed genes with DESeq2 method:
 
@@ -304,7 +304,7 @@ pheatmap(data_counts,
          annotation_col = metadata)
 ```
 
-## 3. GO enrichment
+## 3. GO ENRICHMENT
 
 To accomplish the aim of this article, Gene Ontology (GO) knowledgebase was used in order to define the functions. This tool is useful to determine whether there is any biological function overrepresented among our differentially expressed genes. Moreover GO knowledgebases is the world’s largest source of information on the functions of genes. 
 
@@ -341,7 +341,7 @@ For visualasing the top 6 biological processes:
 head(GOres)
 ```
 
-## 4. SAVE THE ANALYSISS
+## 4. SAVE THE ANALYSIS
 
 Save all the objects (Tables, variables, etc) from the current environment. To not repeat the run every time you open the document:
 
