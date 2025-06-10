@@ -1,28 +1,25 @@
-INTEGRATED IV- Group 2: Cell Growth and Differentiaton
-Ostolaza M., Gómez O., Marcos M. & Montalbán SM. UVic-UCC
+
+
 ---
-title: "B2 Cell Growth & differentiation"
-author: "Sanu Maya Montalbán Ferrer"
-date: "2025-06-03"
+title: "INTEGRATED IV- Group 2: Cell Growth and Differentiaton: RNA_seq analysis with R"
+author: "Gómez O.; Montalbán, SM.; Ostolaza, M.; Sánchez, M"
+date: "2nd Year Biomedicine - Integrated Project IV - 2024/25"
 output: 
   html_document:
     toc: true
-    toc_float: true
     toc_depth: 5
-    number_sections: false
-    toc_collapsed: false
-theme: lumen
-editor_options:
-  markdown:
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
 ---
 
-# 1.PRE DATA TREATMENT
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
+### General specifications
 ```{r echo=FALSE, results='hide',message=FALSE}
 #Load packages:
 library(ggplot2)
@@ -63,15 +60,16 @@ install.packages("pheatmap")
 install.packages("knitr")
 
 
-# to let people know what version is being used
-sessionInfo()
+
 ```
+## 1.PRE DATA PROCESSING AND GLOBAL UNDERSTANDING 
 
-### 1.1 DATA LOADING
-Analysis of data from: https://pmc.ncbi.nlm.nih.gov/articles/PMC9687758/#biomolecules-12-01693-f005. After preprocessing the data a gene expression matrix has been obtained. Combining this information with the corresponding metadata (clinical information) we can proceed with further analysis:
 
+### 1.1 Data Loading
+Data from: https://pmc.ncbi.nlm.nih.gov/articles/PMC9687758/#biomolecules-12-01693-f005. 
+For introducing the data (raw count matrix and metadata), it is necessary to set the working directory:
 ```{r}
-setwd("/Users/sanumaya/Downloads/galaxyB2 group")
+setwd("/Users/sanumaya/Downloads/B2 group")
 ```
 
 Loading the data obtained by galaxy (Feature counts annotated)
@@ -90,8 +88,10 @@ SRR21709666 <- read.delim("/Users/sanumaya/Downloads/galaxyB2 group/SRR21709666.
 
 ```
 
-Joining the different table of counts:
+* Joining the different table of counts:
     * C bind function can only be used when rows number are the same
+    * It is important to check that all tables have the same number of rows (using nrows() function), since it is required for cbind() function. 
+
     
 ```{r}
 counts_all <- cbind(SRR21709659, SRR21709660)
@@ -101,10 +101,10 @@ counts_all <- cbind(counts_all, SRR21709663)
 counts_all <- cbind(counts_all, SRR21709664)
 counts_all <- cbind(counts_all, SRR21709665)
 counts_all <- cbind(counts_all, SRR21709666)
-
 ```
 
 * Loading metadata
+
 ```{r}
 metadata <- read.csv2("Metadata.csv", dec = ",", row.names = 1)
 ```
@@ -122,134 +122,179 @@ table(metadata$Condition)
 ```
 
 
-### 1.2 GENERAL EXPLORATION, NORMALISATION OF THE DATA
+### 1.2 General Exploration
+* In order to observe how the count matrix is organized, the 25 first rows were explored. 
 
-#### Observation of library size
-  *  Size is similiar, which is positive meaning that the variation is minimal and probably due to inevitable experimental human mistakes
 ```{r}
-barplot(colSums(counts_all),las=2, cex.names = 0.6,
-        main ="Barplot of library sizes")
+counts_all[1:25, ]
 ```
-#### Normalisation
+
+* Another tool, for general exploration to determine how many rows and columns the count matrix has:
+
+```{r}
+dim(counts_all)
+```
+
+* Per condition (treatment and control) there are 4 individuals. 
+
+```{r}
+table(metadata$Condition)
+```
+```
+### 1.3 Normalisation
+A general exploration of the library size was performed, to see whether there are any major discrepancies between the samples.
 RNAseq data is not normally distributed. Prior to differential gene expression analysis, the count matrix should be normalized.
+
+
 ```{r}
-CPM <- cpm(counts_all) 
-CPM[1:5, 1:5]
 
-drop <- which(apply(CPM, 1, median) < 0.3)
-#Which is the number of droped genes? 
-length (drop)
-##Write a command here
-#REMEMBER: lenght(vector) i dim(Dataframe)
+barplot(colSums(counts_all),las=2, cex.names = 0.6)
+# Add a title to the plot
+title("Barplot of library sizes")
+# At first sight, it is possible to say that there are not major discrepancies between samples. 
+# More or less all bars at the same level. 
+`Library size's numbers: 
 
-counts <- counts_all[-drop, ]  
-CPM <- CPM[-drop, ]
-nrow(CPM) 
+```{r}
+colSums(counts_all)
 ```
 
- 
-### 1.3 DESE2 OBJECT CREATION AND EXPLORATORY DATA ANALYSIS:
+Creation of a data frame only containing  the numbers of the library size: 
 
 ```{r}
+df_library <- as.data.frame(colSums(counts_all))
+# df_library --> for visualising the data frame that was created 
+```
+
+As mentioned RNA-seq data is not normally distributed. Prior to differential gene expression analysis, the count matrix should be normalized. This can be done using the Computation of Counts Per Million Reads (CPM) function. 
+
+* Computation of counts per million (CPMs) with the edgeR package:
+
+```{r}
+CPM <- cpm(counts_all)
+# CPM[1:5, 1:5] --> to visualise the CPM data frame
+```
+
+### 1.4 Heatmap exploration: 
+
+Clustering/Heatmap
+Briefly, clustering algorithms allow to group the observations and/or variables in our dataset, according to their similarity (dissimilarity). The latter can be measured in many different ways (e.g. Euclidean distance, correlation, etc.). Clustering is helpful to identify subgroups of individuals, outliers and batch effects. 
+
+```{r}
+pheatmap(log2(CPM + 1), 
+         show_rownames = F, 
+         annotation_col = metadata)
+```
+
+### 1.5 DESeq2 object creation 
+
+As it was mentioned, the RNA-seq data has no normal distribution and the application of parametric tests to compare expression of genes such as the T-test can not be adequate. With packages such as DESeq2 and edgeR a proper analysis including the normalization of the data can be carried out.  
+
+With DESeq2 models, a negative binomial distribution is considered. There is no need to filter or check for any distribution. 
+
+Creating a DESeq2 object: combination of the counts and metadata information in a single object. 
+**IMPORTANT:** It is advisable, to indicate the design of your analysis including the variables of interest.
+
+```{r}
+# This function has several arguments. 1. With input we need
+#For paired data, it is included here the id variable: design = Patient.ID + condition
 dds <- DESeqDataSetFromMatrix(countData = counts_all,
                               colData = metadata,
-                              design = ~ Condition)
+                              design = ~ Patient_ID + Condition)
 
-dds$condition <- relevel(dds$Condition, ref = "Control")
+dds$Condition <- relevel(dds$Condition, ref = "Control") # To determine the reference
 ```
 
-#### 1.3.1 Principal Component Analysis PCA EXPLORATION:
+### 1.6 PCA exploration: 
 
-Principal Component Analysis (PCA) is a technique used to emphasize variation and bring out strong patterns in a dataset (dimensionality reduction).
-Before plotting in a PCA it is necessary to normalize first. In this case we will use rlog normalization.
+Principal Component Analysis (PCA) is a technique used to emphasize variation and bring out strong patterns in a dataset (dimensionality reduction). Before plotting in a PCA it is necessary to normalize first. In this case rlog normalization will be used.
 
-rlog normalization. This function transforms the count data to the log2 scale in a way which minimizes differences between samples for rows with small counts, and which normalizes with respect to library size (number of sequences obtained after sequencing).
+Rlog normalization. This function transforms the count data to the log2 scale in a way which minimizes differences between samples for rows with small counts, and which normalizes with respect to library size (number of sequences obtained after sequencing).
 
 ```{r}
 rsel <- rlog(dds, blind=TRUE)
 ```
 
+Obtention of the PCA plot: 
 
-```{r pca, echo=FALSE, out.width="2000px" }
+```{r}
+pc <- prcomp(t(assay(rsel))) 
+pca <- as.data.frame(pc$x) # save as data frame
+pca$SampleID <- rownames(metadata)
+pca$Condition <- metadata$Condition # colorejar , el nom de variable que tinguem
+pca$Patient_ID <- metadata$Patient_ID
+vars <- sprintf('%.1f %%',(pc$sdev)^2/sum(pc$sdev^2)*100)
 
 
 PCA <- ggplot(pca, aes(PC1, PC2)) +
-  geom_point(aes(colour = factor(Condition), shape = factor(Sex)), size = 4) +
-  scale_color_manual(values=c("#bab","blue")) + # Colors for Condition
-  scale_shape_manual(values=c(16, 17)) + # Shapes for Sex (can be adjusted)
-  theme_bw() + 
-  labs(title = "PCA - Principal Components Analysis", 
-       y = paste0("PC2: ", vars[2]), 
-       x = paste0("PC1: ", vars[1]))
-
+  geom_point(aes(colour = factor(Patient_ID), shape = factor(Condition)), size = 4) +
+  scale_color_manual(values=terrain.colors(n=5)) +
+  theme_bw() + labs(title = "PCA", y =paste0("PCA2:",vars[2]), x = paste0("PCA1:",vars[1]))+
+  labs(tittle = "PCA", colour = "Patient ID", shape = "Condition")
 PCA
 ```
 
+## 2. Differential expression (DE) analysis with DESeq2
 
-#### 1.3.2 HEATMAP EXPLORATION:
- 
-```{r}
-pheatmap(log2(CPM + 1), # 0.3 drop  
-         show_rownames = F, 
-         annotation_col = metadata)
-```
- 
+Calculation of the differential expressed genes with DESeq2 method:
 
-## 2. DIFFERENTIAL EXPRESSION ANALYSIS WITH DESEQ2:
 ```{r}
-# the algorithm normalizese the data amb built an statistical  models to make the differential expression tests.
+# Apply DESEeq2 method: this sample normalises the data and builts the statistical models to make the differential expression tests. The design was indicated in the 1.5 DESeq2 object creation section. 
 dds <- DESeq(dds)
-res <- results(dds) #saving results as a variable
-# in order to obsesrve the results a dataframe is created
-df <- data.frame(results(dds))
 
-res01 <- results(dds, alpha=0.05) # every pvalue inferior to 0.05 is considered significant
+# Save the results in a variable 
+res <- results(dds)
+```
+
+Create a data frame with the results, in order to visualise them:
+
+```{r}
+df <- data.frame(results(dds))
+# head(df) --> to visualise the data frame that presents 6 variables
+```
+
+One of the variables from these results, is Adjusted p-values (padj). The p-value stands for probability value; it indicates how likely it is that a result occured by chance. If the p-value is small, it indicates the results was unlikely to have occured by chance alone. These results are knwon as being statistically significant. 
+
+Another variable is the log2FoldChange. The Fold change is a measure describing how much a quantity changes going from an initial to a final value or to one condition to another one. 
+
+How many adjusted p values are less than 0.05 (significant)?: 
+
+```{r}
+res01 <- results(dds, alpha=0.05)
 summary(res01)
 #convert it as a dataframe:
 
 res_sig <- as.data.frame(res01)
-#NA values correspond to filtered genes. Lowly expressed, in few samples.
 ```
-##### Note: logfold
-  * negatve doown regulated
-  * positive ones up regulated - more expressed 
-  * log2((Expr * grp1)/(exore grp2))
-      --> grp2--> ref control
-     --->grp1--> casa
-if the ratio is hgiheer than 0 the loog will be postive if the ratio is lower than 0 the log will be negative
 
-  * as.data.frame vs data.frame --> f(x) igual, a vegades depenet de l¡objecte que vols formar 
+**IMPORTANT**: NA values correspond to filtered genes, that are lowly expressed in a few samples. 
 
+With these data frame it is possible to say that 406 genes are up-regulated and 377 genes are down-regulated. This is possible to known for the LFC (Log Fold Change); one one hand, when it is positive represents that genes are up-regulated at the treatment condition respect control one (as it was mentioned in section 1.5, the control values are the reference). On the other hand, genes are down-regulated in treatment, when LFC presents negative valuee. 
 
-### 2.1 Volcano plot
-How many genes are upregulated? And downregulated? -->
+### 2.1 Volcano plot exploration
+
+To observe the results from the diferential expressed analysis, a Volcano plot was generated: 
+
 ```{r}
 EnhancedVolcano <- EnhancedVolcano(res, lab = rownames(res), x = 'log2FoldChange', y = 'padj',
                                             labSize = 2,  pointSize = 1.5, xlim = c(-7,7),ylim = c(0,30),FCcutoff = 0.58, pCutoff = 0.05, title = "Volcano Plot Control vs Treatment")
 
 EnhancedVolcano
 ```
- 
-Saving the top 30 genes that are more significant ( adj p-val < 0.05) and that are up-regulated.
+
+### 2.2 Heatmap exploration with DE genes
+
+With this input, a second heatmap was performed considering only differential expressed genes: 
+
+Before doing it, is important to filter the genes tha presents a padj less than 0.05, indicating statistical significance, in order to reduce background noisse: 
 
 ```{r}
 res_df <- as.data.frame(res)
 
 # Filter by padj < 0.05
 res_filtered <- res_df[which(res_df$padj < 0.05),]
-
-# Sort by log2FoldChange in descending order
-res_sorted <- res_filtered[order(res_filtered$log2FoldChange, decreasing = TRUE),]
-
-# Select the first 30 rows
-top_30 <- head(res_sorted, 30)
-indices <- rownames(top_30)
-indices
 ```
 
-
-
-Repeating the heatmap considering only differential expressed genes:
 
 ```{r}
 data_counts <- log2(CPM + 1)
@@ -259,81 +304,59 @@ pheatmap(data_counts,
          annotation_col = metadata)
 ```
 
-## 3. GO ENRICHMENT
+## 3. GO enrichment
 
+To accomplish the aim of this article, Gene Ontology (GO) knowledgebase was used in order to define the functions. This tool is useful to determine whether there is any biological function overrepresented among our differentially expressed genes. Moreover GO knowledgebases is the world’s largest source of information on the functions of genes. 
+
+An statistical test needs to be performed (e.g. hypergeometric test, Fisher test) for each function. Briefly, the test will tell if the number of genes associated to a pathway in our set is significantly larger than what would be expected by chance. Hence, for each function a P-value will be got, that it has to compare with the significance threshold (usually α = 0.05). In addition, it is necessary to correct for the fact of multiple testing functions (e.g. via False Discovery Rate).All these steps are performed using the topGO R package.
 
 ```{r}
 # topGO requires all genes as a named list of P-values, plus a function to select significant genes (see below)
-# in this case 'allGenes' or the 'universe' of genes are all the genes that have been tested in the DGE analysis 
+# in this case 'allGenes' or the 'universe' of genes are all the genes that have been tested in the DE analysis 
 
 #Create a res table without the NAs:
 res_ok <- na.omit(res)
-allGenes <- res_ok$padj
+allGenes <- res_ok$padj # filtered by adjusted p-value
 names(allGenes) <- rownames(res_ok)
 
 # Create topGO object
 GOdata <- new("topGOdata",
-              ontology = "BP",                 # We are interested in the 'Biological Process' domain of GO 
+              ontology = "BP",                 # 'Biological Process' domain of GO 
               allGenes = allGenes,             # The 'universe' of genes
               geneSel = function(p){p < 0.05}, # Define function (selects genes with adjusted P-values below 0.05)
               annotationFun = annFUN.org,      # Function to map gene IDs to GO terms
               mapping = "org.Hs.eg.db",        # H. sapiens annotation
-              ID = "entrez")                  # We are working with entrez gene IDs
+              ID = "entrez")                   # The identifier used for the genes, "entrez gene IDs"
 
 # Run Fisher test  
 resultFisher <- runTest(GOdata, algorithm = "classic", statistic = "fisher")
 
 # Results (top 100)
 GOres <- GenTable(GOdata, classicFisher = resultFisher, topNodes = 100) 
+```
 
+For visualasing the top 6 biological processes: 
+
+```{r}
 head(GOres)
 ```
 
+## 4. SAVE THE ANALYSISS
 
-# Autonomous Work day 8
-"152816"    "57611"     "3694"      "1746"      "753"   
-```{r}
-indices[1:2]
-
-data_counts_subB2 <- t(counts_all)
-data_counts_subB2 <- data_counts_subB2[, c("152816", "57611")]
-colnames(data_counts_subB2) <- c("gene1_B2", "gene2_B2")
-ggplot(as.data.frame(data_counts_subB2), aes(x = gene1_B2, y= gene2_B2)) +
-geom_point() +
-labs(tittle = "Scatter Plot", x = "X axis", y = "Y axis")
-
-
-cor.test(data_counts_subB2[, 1], data_counts_subB2[, 2], method = "spearman")
-tail_30 <- tail(res_sorted, 30)
-
-data_counts_sub_underrepB2 <- t(counts_all)
-data_counts_sub_underrepB2 <- as.data.frame(data_counts_sub_underrepB2[, c("11170")])
-# Add the variable in the latest (condition)
-data_counts_sub_underrepB2$Condition <- metadata$Condition
-colnames(data_counts_sub_underrepB2)[1] <- "geneB2"
-ggplot(data_counts_sub_underrepB2, aes(x = Condition, y= geneB2)) +
-geom_boxplot()+
-labs(tittle = "Distribution of the most underrepresented gene across conditions", x ="Group", y = "Raw counts")
-```
-
-
-
-# 4. Development of predictive models using different genes
+Save all the objects (Tables, variables, etc) from the current environment. To not repeat the run every time you open the document:
 
 ```{r}
-# escollim els 5 gens més expressats 
-
-# Sort by log2FoldChange in descending order
-res_sorted5 <- res_filtered[order(res_filtered$log2FoldChange, decreasing = TRUE),]
-
-# Select the first 30 rows
-top_5 <- head(res_sorted, 5)
-indices5 <- rownames(top_5)
-indices5
-
-# gene 152816, 57611, 3694, 1746 & 753
+# To save
+#save.image("/Users/sanumaya/Downloads/B2 group"/"RNA-seq analysis with R.RData")
+# To load the data next time the document is opened
+#load(("/Users/sanumaya/Downloads/B2 group"/"RNA-seq analysis with R.RData"))
 ```
 
-NOTA: relaemnt podem agafar els 3 gens pq 5 són masses models més de 20....
+For reproducibility of this analysis, the following packages, corresponding version and R version are shown with the function sessionInfo(). Also, this can be save:
 
-## 4.1 Creation of dataframe with all the data needed
+```{r}
+sessionInfo()
+# To save 
+# sinf <- sessionInfo()
+```
+
