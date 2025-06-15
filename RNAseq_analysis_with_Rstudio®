@@ -1,0 +1,602 @@
+<!-- This is an R Markdown (.Rmd) file made for rendering in RStudio® -->
+---
+title: "RMarkDown Group B2 of RNAseq analysis with RStudio of:"
+subtitle: "Differential Expression Analysis of the transcriptome of human Trabecular meshwork cells stimulated with Transforming Growth Factor β-1 (TGF-β1) involved in Pseudoexfoliation Syndrome (XFS) and Glaucoma (XFG)"
+author: "Gómez O.; Montalbán, SM.; Ostolaza, M. & Sánchez, M."
+date: "2nd Year in Biomedicine - Integrated Project IV - Year: 2024/25"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 5
+    toc_float: 
+      collapsed: true
+      smooth_scroll: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+#### NOTE: Libraries needed
+* The following libraries are used for this analysis: `ggplot2`, `DESeq2` `edgeR`, `knitr`, `EnhancedVolcano`, `pheatmap`, `topGO`, `org.Hs.eg.db` and finally `wesanderson` for colouring the graphs. 
+* Most of them can be downloaded from CRAN repository, still, a file with how to download all the libraries can be found in this Github repository, the file is named: "Downloading_libraries_IP-IV"
+
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+#Load packages:
+library(ggplot2)
+library(DESeq2)
+library(edgeR)
+library(knitr)
+library(EnhancedVolcano)
+library(pheatmap)
+library(topGO)
+library(org.Hs.eg.db)
+library(wesanderson)
+```
+
+## 1.PRE DATA PROCESSING AND GLOBAL UNDERSTANDING 
+### 1.1 Data Loading
+
+* The data used in this analysis is obtained from: Genome-Wide RNA Sequencing of Human Trabecular Meshwork Cells Treated with TGF-β1: Relevance to Pseudoexfoliation Glaucoma study by Roodnat AW et.al. 
+  * *The article can be found in the following link https://pmc.ncbi.nlm.nih.gov/articles/PMC9687758/#biomolecules-12-01693-f005*
+* For introducing the data (raw count matrix and metadata), it is necessary to set the working directory:
+
+```{r}
+setwd("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis")
+```
+
+* Loading the data obtained by galaxy (Feature counts annotated)
+```{r}
+SRR21709659 <- read.delim("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis/SRR21709659.tabular", row.names=1)
+SRR21709660 <- read.delim("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis/SRR21709660.tabular", row.names=1)
+SRR21709661 <- read.delim("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis/SRR21709661.tabular", row.names=1)
+SRR21709662 <- read.delim("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis/SRR21709662.tabular", row.names=1)
+
+SRR21709663 <- read.delim("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis/SRR21709663.tabular", row.names=1)
+SRR21709664 <- read.delim("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis/SRR21709664.tabular", row.names=1)
+SRR21709665 <- read.delim("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis/SRR21709665.tabular", row.names=1)
+SRR21709666 <- read.delim("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis/SRR21709666.tabular", row.names=1)
+```
+
+* Joining the different table of counts:
+    * C bind function can only be used when rows number are the same
+    * It is important to check that all tables have the same number of rows (using nrows() function), since it is required for `cbind ()` function. 
+    
+```{r}
+counts_all <- cbind(SRR21709659, SRR21709660)
+counts_all <- cbind(counts_all, SRR21709661)
+counts_all <- cbind(counts_all, SRR21709662)
+counts_all <- cbind(counts_all, SRR21709663)
+counts_all <- cbind(counts_all, SRR21709664)
+counts_all <- cbind(counts_all, SRR21709665)
+counts_all <- cbind(counts_all, SRR21709666)
+```
+
+* Loading metadata
+```{r}
+metadata <- read.csv2("Metadata.csv", dec = ",", row.names = 1)
+```
+
+* In order to perform `DESeq2` metadata rows and column names need to be the same. Therefore it is required to check it:
+```{r}
+rownames(metadata) %in% colnames (counts_all) 
+```
+
+
+### 1.2 General Exploration
+
+* In order to observe how the count matrix looks, the 25 first rows were explored. 
+```{r}
+counts_all[1:25, ]
+```
+
+* Another tool, for general exploration to determine how many rows and columns the count matrix has:
+```{r}
+dim(counts_all)
+```
+
+* Per condition (treatment and control) there are 4 individuals. 
+```{r}
+table(metadata$Condition) 
+``` 
+
+
+### 1.3 Normalisation
+
+* A general exploration of the library size was performed, to see whether there are any major discrepancies between the samples.
+* RNAseq data is not normally distributed. Prior to differential gene expression analysis, the count matrix should be normalised.
+```{r}
+
+barplot(colSums(counts_all),las=2, cex.names = 0.6,
+        col=wes_palette(name="Zissou1", type = "continuous"),
+        main ="Barplot of library sizes") 
+
+#At first sight, no major discrepancies between samples can be observed.
+#More or less all bars at the same level, meaning they have the same number of reads per each sample.
+
+```
+
+* Library size's numbers: 
+```{r}
+colSums(counts_all)
+```
+
+* Creation of a data frame only containing  the numbers of the library size:
+```{r}
+df_library <- as.data.frame(colSums(counts_all))
+# df_library --> for visualising the data frame that was created 
+```
+
+* As mentioned RNAseq data is not normally distributed. 
+* Prior to differential gene expression analysis, the count matrix should be normalised. This can be done using the Computation of Counts Per Million Reads `(CPM)` function. 
+
+* Computation of Counts Per Million (CPMs) with the `edgeR` package:
+```{r}
+CPM <- cpm (counts_all) 
+# CPM[1:5, 1:5] --> to visualise the CPM data frame
+```
+
+### 1.4 Heatmap exploration
+
+* Clustering/Heatmap
+  * Clustering algorithms allow to group the observations and/or variables in our dataset, according to their similarity (dissimilarity). 
+  * The latter can be measured in many different ways (e.g. Euclidean distance, correlation, etc.). 
+  * Clustering is helpful to identify subgroups of individuals, outliers and batch effects. 
+```{r}
+pheatmap(log2(CPM + 1), 
+         show_rownames = F, 
+         annotation_col = metadata, 
+         col = wes_palette(name = "Zissou1", type = "continuous"))
+
+```
+
+### 1.5 DESeq2 object creation 
+
+* Again, as mentioned, the RNAseq data has no normal distribution therefore the application of parametric tests to compare expression of genes such as the T-test are not adequate. 
+* Using packages like `DESeq2` and `edgeR` a proper analysis including the normalisation of the data can be carried out.  
+* With `DESeq2` models, a negative binomial distribution is considered. There is no need to filter or check for any distribution. 
+* Creating a `DESeq2` object: combination of the counts and metadata information in a single object. 
+* **IMPORTANT:** It is advisable, to indicate the design of your analysis including the variables of interest.
+
+```{r}
+#For paired data, it is included here the id variable: design = Sample_ID + Condition
+metadata$Sample_ID <- factor(metadata$Sample_ID)
+dds <- DESeqDataSetFromMatrix(countData = counts_all,
+                              colData = metadata,
+                              design = ~ Sample_ID + Condition)
+# Sample_ID was added since the data used is paired data.
+# **Sex was not considered in the analysis because the algorithm fails to run since it detects associations within the data** 
+
+dds$Condition <- relevel(dds$Condition, ref = "Control") # To determine the reference
+```
+
+### 1.6 Principal Component Analysis (PCA) exploration
+
+* Principal Component Analysis (PCA) is a technique used to emphasise variation and bring out strong patterns in a dataset (dimensionality reduction). 
+* Before plotting in a PCA it is necessary to normalise first. In this case rlog normalisation will be used.
+
+* `Rlog` normalisation: this function transforms the count data to the log2 scale in a way which minimises differences between samples for rows with small counts, and which normalises with respect to library size (number of sequences obtained after sequencing).
+```{r}
+rsel <- rlog(dds, blind=TRUE)
+```
+
+* Obtention of the PCA plot: 
+```{r}
+pc <- prcomp(t(assay(rsel))) 
+pca <- as.data.frame(pc$x) # save as data frame
+pca$SampleID <- rownames(metadata)
+pca$Condition <- metadata$Condition 
+pca$Sample_ID <- metadata$Sample_ID
+vars <- sprintf('%.1f %%',(pc$sdev)^2/sum(pc$sdev^2)*100)
+
+
+PCA <- ggplot(pca, aes(PC1, PC2)) +
+  geom_point(aes(colour = factor(Sample_ID), shape = factor(Condition)), size = 4) +
+  scale_color_manual(values= c ("#3c9ab3", "#78b7c0", "#ebcc2a", "#e1af10")) +
+  theme_bw() + labs(title = "PCA", y =paste0("PCA2:",vars[2]), x = paste0("PCA1:",vars[1]))+
+  labs(tittle = "PCA", colour = "Sample ID", shape = "Condition")
+PCA
+
+
+```
+
+## 2. DIFFERENTIAL EXPRESSION (DE) ANALYSIS WITH DESeq2
+
+* Calculation of the differential expressed genes with `DESeq2` method:
+
+```{r}
+# Apply DESEeq2 method: this sample normalises the data and builts the statistical models to make the differential expression tests. The design was indicated in the 1.5 DESeq2 object creation section. 
+dds <- DESeq(dds)
+
+# Save the results in a variable 
+res <- results(dds)
+```
+
+* Create a data frame with the results, in order to visualise them:
+
+```{r}
+df <- data.frame(results(dds))
+# head(df) --> to visualise the data frame that presents 6 variables
+```
+
+* One of the variables from these results, is Adjusted p-values (padj). 
+  * The p-value stands for probability value; it indicates how likely it is that a result occurred by chance. 
+  * If the p-value is small, it indicates the results was unlikely to have occurred by chance alone. These results are knwon as being statistically significant. 
+* Another variable is the log2FoldChange. 
+  * The Fold change is a measure describing how much a quantity changes going from an initial to a final value or to one condition to another one. 
+
+
+* Finding valuable adjusted p-values (those who are less than 0.05, significant): 
+```{r}
+res01 <- results(dds, alpha=0.05)
+summary(res01) # 406 genes are up-regulated and 377 genes down-regulated
+#convert it as a dataframe:
+res_sig <- as.data.frame(res01)
+```
+
+**IMPORTANT**: NA values correspond to filtered genes, that are lowly expressed in a few samples. 
+
+* With these data frame it is possible to affirm that 406 genes are up-regulated and 377 genes are down-regulated. 
+* The Log Fold Change (LFC) is used to assess gene regulation in response to the treatment. 
+  * A positive LFC indicates that genes are up-regulated in the treatment condition compared to the control, which serves as the reference (as mentioned in Section 1.5). 
+  * Conversely, a negative LFC signifies that genes are down-regulated under treatment conditions
+
+### 2.1 Volcano plot exploration
+
+* To observe the results from the differential expressed analysis, a Volcano plot was generated: 
+```{r}
+EnhancedVolcano <- EnhancedVolcano(res, lab = rownames(res), x = 'log2FoldChange', y = 'padj',
+                                            labSize = 2,  pointSize = 1.5, xlim = c(-7,7),ylim = c(0,30),FCcutoff = 0.58, pCutoff = 0.05, title = "Volcano Plot Control vs Treatment", col = wes_palette(n=4, name = "Zissou1"))
+
+EnhancedVolcano
+```
+
+
+### 2.2 Heatmap exploration with DE genes
+
+* With this input, a second heat map was performed considering **only** differential expressed genes.
+* It is important to filter the genes that present a padj less than 0.05, indicating statistical significance, in order to reduce background noise: 
+
+```{r}
+res_df <- as.data.frame(res)
+
+# Filter by padj < 0.05
+res_filtered <- res_df[which(res_df$padj < 0.05),]
+
+# Sort by log2FoldChange in descending order
+res_sorted <- res_filtered[order(res_filtered$log2FoldChange, decreasing = TRUE),]
+# Select the first 3 genes that are up-regulated
+top_3 <- res_sorted[1:3,] 
+top_3
+#indices <- rownames(top_3)
+#indices
+```
+
+* Second heat map with **only** differential expressed genes:
+```{r}
+data_counts <- log2(CPM + 1)
+data_counts <- subset(data_counts, rownames(data_counts) %in% rownames(res_filtered))
+pheatmap(data_counts, 
+         show_rownames = F, 
+         annotation_col = metadata,
+         col = wes_palette(name = "Zissou1", type = "continuous"))
+# New clustering patterns are observed by the variable Condition, that is interesting since its different from prior heat map where the clustering pattern is according to Sample_ID variable.
+
+```
+
+## 3. GO ENRICHMENT
+
+* To accomplish the aim of this article, Gene Ontology (GO) knowledgebase was used in order to define the functions. 
+* This tool is useful for determining whether any biological function is overrepresented among the differentially expressed genes in the dataset.
+* GO knowledgebases is the world’s largest source of information on the functions of genes. 
+* A statistical test needs to be performed (e.g. hypergeometric test, Fisher test) for each function. 
+* Briefly, the test will determine if the number of genes associated to a pathway in the data set given to it is significantly larger than what would be expected by chance. 
+* Hence, for each function a P-value will be got, that it has to compare with the significance threshold (usually α = 0.05). 
+* In addition, it is necessary to correct for the fact of multiple testing functions (e.g. via False Discovery Rate). 
+* All these steps are performed using the `topGO` R package.
+
+### 3.1 All Differentially Expressed genes
+
+```{r}
+# topGO requires all genes as a named list of P-values, plus a function to select significant genes (see below)
+# in this case 'allGenes' or the 'universe' of genes are all the genes that have been tested in the DE analysis 
+
+#Create a res table without the NAs:
+res_ok <- na.omit(res)
+allGenes <- res_ok$padj # filtered by adjusted p-value
+names(allGenes) <- rownames(res_ok)
+
+# Create topGO object
+GOdata <- new("topGOdata",
+              ontology = "BP",                 # 'Biological Process' domain of GO 
+              allGenes = allGenes,             # The 'universe' of genes
+              geneSel = function(p){p < 0.05}, # Define function (selects genes with adjusted P-values below 0.05)
+              annotationFun = annFUN.org,      # Function to map gene IDs to GO terms
+              mapping = "org.Hs.eg.db",        # H. sapiens annotation
+              ID = "entrez")                   # The identifier used for the genes, "entrez gene IDs"
+
+# Run Fisher test  
+resultFisher <- runTest(GOdata, algorithm = "classic", statistic = "fisher")
+
+# Results (top 100)
+GOres <- GenTable(GOdata, classicFisher = resultFisher, topNodes = 100) 
+```
+
+* For visualising the top 6 biological processes: 
+```{r}
+head(GOres)
+```
+
+#### 3.1.1 ID obtention of significant genes in each of the GO.ID from the data of interest
+```{r}
+#1) List of all the genes annotated to each term
+gogenes_DE <- genesInTerm(GOdata)
+
+#2) Significant Genes
+sigGenes_DE <- sigGenes(GOdata)
+
+
+#3) Naming specific geneterms
+GOterm_1DE <-"GO:0032501"
+GOterm_2DE <-"GO:0048856"
+GOterm_3DE <-"GO:0048731"
+GOterm_4DE <-"GO:0007275"
+GOterm_5DE <-"GO:0009888"
+
+#4) Annotating genes in each go term
+allGenesInTerm_1DE<-gogenes_DE[[GOterm_1DE]]
+allGenesInTerm_2DE<-gogenes_DE[[GOterm_2DE]]
+allGenesInTerm_3DE<-gogenes_DE[[GOterm_3DE]]
+allGenesInTerm_4DE<-gogenes_DE[[GOterm_4DE]]
+allGenesInTerm_5DE<-gogenes_DE[[GOterm_5DE]]
+
+#5) Intersection to obtain significant genes within the article data
+sigGenesInTerm_1DE<-intersect(allGenesInTerm_1DE, sigGenes_DE)
+#sigGenesInTerm_1DE  #The top 3 significant genes can be found in this GO term: "152816", "57611"  and "3694"
+
+sigGenesInTerm_2DE<-intersect(allGenesInTerm_2DE, sigGenes_DE)
+#sigGenesInTerm_2DE  #The top 3 significant genes can be found in this GO term: "152816", "57611"  and "3694"
+
+sigGenesInTerm_3DE<-intersect(allGenesInTerm_3DE, sigGenes_DE)
+#sigGenesInTerm_3DE #Only 2 out of the 3 top genes can be found in this GO term: "57611" and  "3694" 
+
+sigGenesInTerm_4DE<-intersect(allGenesInTerm_4DE, sigGenes_DE)
+#sigGenesInTerm_4DE #The top 3 significant genes can be found in this GO term: "152816", "57611"  and "3694"
+
+sigGenesInTerm_5DE<-intersect(allGenesInTerm_5DE, sigGenes_DE)
+#sigGenesInTerm_5DE #Only 2 out of the 3 top genes can be found in this GO term: "152816" and  "3694" 
+
+```
+
+### 3.2 Differentially expressed genes and Up-regulated 
+#### 3.2.1 Differentially expressed genes and Up-regulated: log2 foldchange > 1
+
+```{r}
+res_ok_up1 <- subset(res_ok, res_ok$log2FoldChange > 1) # filtered by logFold > 1
+allGenesup1 <- res_ok_up1$padj
+names(allGenesup1) <- rownames(res_ok_up1)
+
+# Create topGO object
+GOdata_up1 <- new("topGOdata",
+              ontology = "BP",                 # The 'Biological Process' domain of GO is the focus of this analysis 
+              allGenes = allGenesup1,             # The 'universe' of genes
+              geneSel = function(p){p < 0.05}, # Define function (selects genes with adjusted P-values below 0.05)
+              annotationFun = annFUN.org,      # Function to map gene IDs to GO terms
+              mapping = "org.Hs.eg.db",        # H. sapiens annotation
+              ID = "entrez")                   # The identifier used for the genes, "entrez gene IDs"
+# Run Fisher test  
+resultFisher <- runTest(GOdata_up1, algorithm = "classic", statistic = "fisher")
+
+# Results (top 100)
+GOres_up1 <- GenTable(GOdata_up1, classicFisher = resultFisher, topNodes = 100) 
+```
+
+* Visualising the top 6 biological processes
+
+```{r}
+head(GOres_up1)
+```
+
+
+* The team has chosen to carry out a more in restrictive filter since the GO.ID found are not strongly linked to XFS/XFG.
+
+#### 3.2.2 Differentially expressed genes and Up-regulated: log2 foldchange > 2
+
+```{r}
+res_ok_up2 <- subset(res_ok, res_ok$log2FoldChange > 2) # filtered by logFold > 2
+allGenesup2 <- res_ok_up2$padj
+names(allGenesup2) <- rownames(res_ok_up2)
+
+# Create topGO object
+GOdata_up2 <- new("topGOdata",
+              ontology = "BP",                 # The 'Biological Process' domain of GO is the focus of this analysis 
+              allGenes = allGenesup2,             # The 'universe' of genes
+              geneSel = function(p){p < 0.05}, # Define function (selects genes with adjusted P-values below 0.05)
+              annotationFun = annFUN.org,      # Function to map gene IDs to GO terms
+              mapping = "org.Hs.eg.db",        # H. sapiens annotation
+              ID = "entrez")                   # The identifier used for the genes, "entrez gene IDs"
+# Run Fisher test  
+resultFisher <- runTest(GOdata_up2, algorithm = "classic", statistic = "fisher")
+
+# Results (top 100)
+GOres_up2 <- GenTable(GOdata_up2, classicFisher = resultFisher, topNodes = 100) 
+```
+
+
+* Visualising the top 6 biological processes
+```{r}
+head(GOres_up2)
+```
+
+
+##### 3.2.2.1 ID obtention of significant genes in each of the GO.ID from the data of interest
+```{r}
+
+#1) List of all the genes annotated to each term
+gogenes_up2 <- genesInTerm(GOdata_up2)
+
+#2) Significant Genes
+sigGenes_up2 <- sigGenes(GOdata_up2)
+
+
+#3) Naming specific geneterms
+GOterm_1up2<-"GO:0007178"
+GOterm_2up2<-"GO:0141091"
+GOterm_3up2<-"GO:0090092"
+GOterm_4up2<-"GO:0006022"
+GOterm_5up2<-"GO:0007179"
+
+#4) Annotating genes in each go term
+allGenesInTerm_1up2<-gogenes_up2[[GOterm_1up2]]
+allGenesInTerm_2up2<-gogenes_up2[[GOterm_2up2]]
+allGenesInTerm_3up2<-gogenes_up2[[GOterm_3up2]]
+allGenesInTerm_4up2<-gogenes_up2[[GOterm_4up2]]
+allGenesInTerm_5up2<-gogenes_up2[[GOterm_5up2]]
+
+#5) Intersection to obtain signficnt genes within the article data
+sigGenesInTerm_1up2<-intersect(allGenesInTerm_1up2, sigGenes_up2)
+#sigGenesInTerm_1up2 #Only 1 out of the 3 top genes can be found in this GO term: "3694"
+
+sigGenesInTerm_2up2<-intersect(allGenesInTerm_2up2, sigGenes_up2)
+#sigGenesInTerm_2up2 #Only 1 out of the 3 top genes can be found in this GO term: "3694"
+
+sigGenesInTerm_3up2<-intersect(allGenesInTerm_3up2, sigGenes_up2)
+#sigGenesInTerm_3up2 #Any of the 3 top genes can be found in this GO term
+
+sigGenesInTerm_4up2<-intersect(allGenesInTerm_4up2, sigGenes_up2)
+#sigGenesInTerm_4up2  #Any of the 3 top genes can be found in this GO term
+
+sigGenesInTerm_5up2<-intersect(allGenesInTerm_5up2, sigGenes_up2)
+#sigGenesInTerm_5up2 #Only 1 out of the 3 top genes can be found in this GO term: "3694"
+```
+
+### 3.3 Differentially expressed genes and Down-regulated
+#### 3.3.1 Differentially expressed genes and Down-regulated: log2 foldchange < -1
+
+```{r}
+res_ok_down1 <- subset(res_ok, res_ok$log2FoldChange < -1)# filtered by logFold < -1
+allGenesdown1 <- res_ok_down1$padj
+names(allGenesdown1) <- rownames(res_ok_down1)
+
+# Create topGO object
+GOdata_down1 <- new("topGOdata",
+              ontology = "BP",                 # The 'Biological Process' domain of GO is the focus of this analysis 
+              allGenes = allGenesdown1,             # The 'universe' of genes
+              geneSel = function(p){p < 0.05}, # Define function (selects genes with adjusted P-values below 0.05)
+              annotationFun = annFUN.org,      # Function to map gene IDs to GO terms
+              mapping = "org.Hs.eg.db",        # H. sapiens annotation
+              ID = "entrez")                   # The identifier used for the genes, "entrez gene IDs"
+
+# Run Fisher test  
+resultFisher <- runTest(GOdata_down1, algorithm = "classic", statistic = "fisher")
+
+# Results (top 100)
+GOres_down1 <- GenTable(GOdata_down1, classicFisher = resultFisher, topNodes = 100) 
+```
+
+* Visualising the top 6 biological processes
+```{r}
+head(GOres_down1)
+```
+
+* The team has chosen to carry out a more restrictive filter since the GO.ID found are not strongly linked to the XFS/XFG.
+
+#### 3.3.2 Differentially expressed genes and Down-regulated: log2 foldchange < -2
+```{r}
+res_ok_down2 <- subset(res_ok, res_ok$log2FoldChange < -2)
+allGenesdown2 <- res_ok_down2$padj
+names(allGenesdown2) <- rownames(res_ok_down2)
+
+# Create topGO object
+GOdata_down2 <- new("topGOdata",
+              ontology = "BP",                 # The 'Biological Process' domain of GO is the focus of this analysis 
+              allGenes = allGenesdown2,             # The 'universe' of genes
+              geneSel = function(p){p < 0.05}, # Define function (selects genes with adjusted P-values below 0.05)
+              annotationFun = annFUN.org,      # Function to map gene IDs to GO terms
+              mapping = "org.Hs.eg.db",        # H. sapiens annotation
+              ID = "entrez")                   # The identifier used for the genes, "entrez gene IDs"
+
+# Run Fisher test  
+resultFisher <- runTest(GOdata_down2, algorithm = "classic", statistic = "fisher")
+
+# Results (top 100)
+GOres_down2 <- GenTable(GOdata_down2, classicFisher = resultFisher, topNodes = 100) 
+
+```
+
+* Visualising the top 6 biological processes
+
+```{r}
+head(GOres_down2)
+```
+
+
+##### 3.3.2.1 ID obtention of significant genes in each of the GO.ID from the data of interest
+
+```{r}
+#1) List of all the genes annotated to each term
+gogenes_down2 <- genesInTerm(GOdata_down2)
+
+#2) Significant Genes
+sigGenes_down2 <- sigGenes(GOdata_down2)
+
+#3) Naming specific geneterms
+GOterm_1down2<-"GO:0002831"
+GOterm_2down2<-"GO:0043933"
+GOterm_3down2<-"GO:0065003"
+GOterm_4down2<-"GO:0097435"
+GOterm_5down2<-"GO:0097435"
+
+#4) Anotaiting genes in each go term
+allGenesInTerm_1down2<-gogenes_down2[[GOterm_1down2]]
+allGenesInTerm_2down2<-gogenes_down2[[GOterm_2down2]]
+allGenesInTerm_3down2<-gogenes_down2[[GOterm_3down2]]
+allGenesInTerm_4down2<-gogenes_down2[[GOterm_4down2]]
+allGenesInTerm_5down2<-gogenes_down2[[GOterm_5down2]]
+
+#5) Intersectioon to obtain signficnt genes within the article data
+sigGenesInTerm_1down2<-intersect(allGenesInTerm_1down2, sigGenes_down2)
+#sigGenesInTerm_1down2  #Any of the 3 top genes can be found in this GO term
+
+sigGenesInTerm_2down2<-intersect(allGenesInTerm_2down2, sigGenes_down2)
+#sigGenesInTerm_2down2  #Any of the 3 top genes can be found in this GO term
+
+sigGenesInTerm_3down2<-intersect(allGenesInTerm_3down2, sigGenes_down2)
+#sigGenesInTerm_3down2  #Any of the 3 top genes can be found in this GO term
+
+sigGenesInTerm_4down2<-intersect(allGenesInTerm_4down2, sigGenes_down2)
+#sigGenesInTerm_4down2  #Any of the 3 top genes can be found in this GO term
+
+sigGenesInTerm_5down2<-intersect(allGenesInTerm_5down2, sigGenes_down2)
+#sigGenesInTerm_5down2  #Any of the 3 top genes can be found in this GO term
+
+```
+
+
+## 4. SAVE THE ANALYSIS
+
+* In order to save all the objects (Tables, variables, etc) from the current environment:
+
+```{r}
+# To save
+#save.image("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis")
+# To load the data next time the document is opened
+#load(("/Users/sanumaya/Desktop/BSc/year2/term2/IP_IV/B2_RNAseq_wR_analysis")
+```
+
+* To ensure the reproducibility of this analysis, the packages used, their corresponding versions, and the R version are displayed using the `sessionInfo()` function. 
+* Additionally, this information can be saved as follows:
+
+```{r}
+sessionInfo()
+# To save 
+# sinf <- sessionInfo()
+```
+
+
+
+
+
+
