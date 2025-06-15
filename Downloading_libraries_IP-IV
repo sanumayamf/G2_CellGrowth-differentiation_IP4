@@ -1,0 +1,50 @@
+#Load packages:
+library(ggplot2)
+library(DESeq2)
+library(edgeR)
+library(ggplot2)
+library(knitr)
+library(EnhancedVolcano)
+library(pheatmap)
+library(topGO)
+library(org.Hs.eg.db)
+library(wesanderson)
+
+
+#To download:
+##########Installation of the mentioned packages in case you don't have them (Run only once):
+
+##################From bioconductor:
+##Deseq2
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("DESeq2")
+
+#EnhancedVolcano
+BiocManager::install('EnhancedVolcano')
+#or 
+devtools::install_github('kevinblighe/EnhancedVolcano')
+
+##edgeR
+BiocManager::install("edgeR")
+
+#topGO
+BiocManager::install("topGO")
+
+#clusterProfiler
+BiocManager::install("clusterProfiler")
+
+#org.Hs.eg.db
+BiocManager::install("org.Hs.eg.db")
+
+##############From CRAN:
+
+##ggplot2
+install.packages("ggplot2")
+
+##pheatmap
+install.packages("pheatmap")
+
+#knitr
+
+installed.packages()[, "Package"]
