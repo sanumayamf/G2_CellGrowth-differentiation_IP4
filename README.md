@@ -11,9 +11,7 @@ Pseudoexfoliation Syndrome (XFS) is a chronic disorder characterised by the accu
 
 This article aims to understand which genes are related to XFG and to identify which biological processes are potentially activated or inhibited in this pathology. To achieve the aim, computational tools such as National Centre for Biotechnology Information (NCBI) and Protein Data Bank (PDB) allowed the global characterisation of TGF-β1. Using RNA sequencing, the human trabecular meshwork cells’ transcriptome was analysed after stimulation with TGF-β1 using RStudio® and Galaxy European Server. Enabling the identification of differentially expressed genes and biological functions related to XFS/XFG. 
 
-Thanks to the differential expression (DE) and functional enrichment analysis, it has been determined that the Integrin Subunit Beta 6 (ITGB6) gene is one of the differentially expressed. Most of the differentially expressed genes are related to developmental processes, such as tissue or system development. It has also been seen that ITGB6 gene interacts directly with TGF-β1.
-
-
+Thanks to the differential expression (DE) and functional enrichment analysis, ITGB6 seems to be related to XFG pathology. A deeper understanding of ITGB6’s functions and mechanisms may enable its use as a biomarker or therapeutic target for managing the pathological ECM changes associated in XFG.
 
 ***Key words: : Pseudoexfoliation Syndrome (XFS), Pseudoexfoliation Glaucoma (XFG), Transforming Growth Factor Beta 1 (TGF-β1), Transforming Growth Factor Receptor Beta 1 (TGFR-β1), Integrin Subunit Beta 6 (ITGB6) & Differential analysis (DE)***
 
